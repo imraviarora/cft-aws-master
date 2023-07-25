@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Nginx RouteTraffic Server.
+
+Resources:
+  NginxInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-08795883c7b4b7140"
+      InstanceType: t4g.small 
+      KeyName: devops-access
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: "subnet-03f1f0ddXXXXXXXX"
+          GroupSet:
+            - !Ref NginxSecurityGroup
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y nginx
+          systemctl start nginx
+          systemctl enable nginx
+      # SecurityGroups:
+      #   - !Ref NginxSecurityGroup
+      Tags:
+        - Key: Name
+          Value: "nginx-ec2-rv-test"
+  
+  NginxSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP access to Nginx server
+      VpcId: "vpc-0a5304a0XXXXXXXX"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: nginx-security-group-public-test
+
+Outputs:
+  PublicIp:
+    Description: Public IP of the Nginx server
+    Value: !GetAtt NginxInstance.PublicIp

@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "VPC - Subnets 2Pvt 2Pub - Route Table with associations - IGW - NAT"
+
+Parameters:
+  EnvironmentName:
+    Description: Select the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  VPCCIDR:
+    Description: Enter VPC CIDR Range
+    Type: String
+    Default: "10.0.0.0/16"
+  PublicSubnetACIDR:
+    Description: Enter Public Subnet A CIDR Range
+    Type: String
+    Default: "10.0.0.0/24"
+  PublicSubnetBCIDR:
+    Description: Enter Public Subnet B CIDR Range
+    Type: String
+    Default: "10.0.1.0/24"
+  PrivateSubnetACIDR:
+    Description: Enter Private Subnet A CIDR Range
+    Type: String
+    Default: "10.0.10.0/24"
+  PrivateSubnetBCIDR:
+    Description: Enter Private Subnet B CIDR Range
+    Type: String
+    Default: "10.0.11.0/24"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"          
+        Parameters:
+          - EnvironmentName      
+      - Label:
+          default: "Networking Configuration"    
+        Parameters:
+          - VPCCIDR
+          - PublicSubnetACIDR
+          - PublicSubnetBCIDR 
+          - PrivateSubnetACIDR
+          - PrivateSubnetBCIDR
+    ParameterLabels:
+      EnvironmentName:
+        default: "In which environment you are planning to create this networking?"
+
+Resources:
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsHostnames: false
+      EnableDnsSupport: false
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} VPC"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: vpc
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+  PublicSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      CidrBlock: !Ref PublicSubnetACIDR
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} Public Subnet AZ B"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: subnet
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+      AvailabilityZone:
+        Fn::Select:
+          - "1"
+          - Fn::GetAZs:
+              Ref: "AWS::Region"
+  PublicSubnet2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      CidrBlock: !Ref PublicSubnetBCIDR
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} Public Subnet AZ C"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: subnet
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+      AvailabilityZone:
+        Fn::Select:
+          - "2"
+          - Fn::GetAZs:
+              Ref: "AWS::Region"
+  PrivateSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      CidrBlock: !Ref PrivateSubnetACIDR
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} Private Subnet AZ B"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: subnet
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+      AvailabilityZone:
+        Fn::Select:
+          - "1"
+          - Fn::GetAZs:
+              Ref: "AWS::Region"
+  PrivateSubnet2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      CidrBlock: !Ref PrivateSubnetBCIDR
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} Private Subnet AZ C"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: subnet
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+      AvailabilityZone:
+        Fn::Select:
+          - "2"
+          - Fn::GetAZs:
+              Ref: "AWS::Region"
+  RouteTablePublic:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} Public Route Table"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: routingtable
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+  RouteTablePublicAssociation1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId:
+        Ref: "RouteTablePublic"
+      SubnetId:
+        Ref: "PublicSubnet1"
+  RouteTablePublicAssociation2:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId:
+        Ref: "RouteTablePublic"
+      SubnetId:
+        Ref: "PublicSubnet2"
+  RouteTablePublicRoute0:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      RouteTableId:
+        Ref: "RouteTablePublic"
+      GatewayId:
+        Ref: "Igw"
+  RouteTablePrivate1:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} Private Route Table"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: routingtable
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+  RouteTablePrivate1Association1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId:
+        Ref: "RouteTablePrivate1"
+      SubnetId:
+        Ref: "PrivateSubnet1"
+  RouteTablePrivate1Association2:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId:
+        Ref: "RouteTablePrivate1"
+      SubnetId:
+        Ref: "PrivateSubnet2"
+  RouteTablePrivate1Route0:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      RouteTableId:
+        Ref: "RouteTablePrivate1"
+      NatGatewayId:
+        Ref: "NatGw1"
+  Igw:
+    Type: "AWS::EC2::InternetGateway"
+    Properties: 
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} IGW"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: internetgateway
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+  IGWAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      InternetGatewayId:
+        Ref: "Igw"
+  NatGw1:
+    Type: "AWS::EC2::NatGateway"
+    Properties:
+      SubnetId:
+        Ref: "PublicSubnet1"
+      AllocationId:
+        Fn::GetAtt:
+          - "NatGw1ElasticIP"
+          - "AllocationId"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} NAT GTW"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: natgateway
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+  NatGw1ElasticIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: "vpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentName} NAT EIP"
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value: elasticip
+        - Key: Component
+          Value: networking
+        - Key: Env
+          Value:
+            Ref: EnvironmentName
+      
+
+Outputs:
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+  PublicSubnet01Id:
+    Description: Public Subnet 01 Id
+    Value: !Ref PublicSubnet1
+  PublicSubnet02Id:
+    Description: Public Subnet 02 Id
+    Value: !Ref PublicSubnet2
+  PrivateSubnet01Id:
+    Description: Private Subnet 01 Id
+    Value: !Ref PrivateSubnet1
+  PrivateSubnet02Id:
+    Description: Private Subnet 02 Id
+    Value: !Ref PrivateSubnet2

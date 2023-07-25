@@ -1,0 +1,14 @@
+[Unit]
+Description=Jetty
+After=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+ExecStart=java -Xmx1200M -Xms500M -Xmn400M -jar /home/ubuntu/jetty/jetty-distribution-9.4.36.v20210114/start.jar jetty.home=/home/ubuntu/jetty/jetty-distribution-9.4.36.v20210114 jetty.base=/home/ubuntu/jetty/base jetty.http.port=8080
+ExecStop=/bin/kill ${MAINPID}
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target

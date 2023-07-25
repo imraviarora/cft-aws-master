@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CFN Init Demo - Just create Metadata Template
+Resources: 
+  MyVMInstance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      Comment: Deploy a simple Application
+      AWS::CloudFormation::Init:
+        config:
+          sources:
+            /tmp: "https://hf-devops.s3.ap-south-1.amazonaws.com/ps/configs/nginx/python.zip"
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=3
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.MyVMInstance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MyVMInstance --region ${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"                      
+          commands:
+            test1:
+               command: "timedatectl set-timezone Asia/Kolkata"
+               cwd: "/tmp"                            
+            test2:
+               command: "sudo yum -y erase java-1.7.0-openjdk.x86_64"
+               cwd: "~"
+    Properties:
+      ImageId: "ami-08795883c7b4b7140"
+      InstanceType: t4g.small 
+      KeyName: devops-access
+      IamInstanceProfile: 
+        Ref: MyInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: "subnet-1c4da675"
+          GroupSet:
+            - "sg-2cd92a45"
+      UserData:
+        "Fn::Base64": 
+          !Sub |
+            #!/bin/bash -xe
+            # Get latest CloudFormation package - These packages change frequently
+            yum update -y aws-cfn-bootstrap
+            # Start cfn-init to Install all Metadata content (pacakges, sources, files, commands and services )
+            /opt/aws/bin/cfn-init -s ${AWS::StackId} -r MyVMInstance --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
+            # Signal the status from cfn-init 
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource MyVMInstance --region ${AWS::Region}
+            # Start cfn-hup daemon so that it will keep listening to any changes to EC2 Instance Metadata. 
+            /opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'
+
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - "ec2-generic"
+
+Outputs:
+  AppURL:
+    Description: Application URL to access
+    Value: !Sub 'http://${MyVMInstance.PublicIp}:80/'

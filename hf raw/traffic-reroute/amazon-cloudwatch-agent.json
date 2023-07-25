@@ -1,0 +1,52 @@
+{
+    "agent": {
+            "metrics_collection_interval": 60,
+            "region": "ap-south-1",
+            "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log",
+            "debug": false,
+            "run_as_user": "cwagent"
+    },
+    "metrics": {
+    "metrics_collected": {
+        "procstat": [
+            {
+                "pattern": ".*",
+                "measurement": [
+                    "cpu_usage"
+                ],
+                "metrics_collection_interval": 10
+            },
+            {
+                "pattern": "[a-zA-Z0-9]",
+                "measurement": [
+                    "memory_rss",
+                    "nice_priority"
+                ],
+                "metrics_collection_interval": 10
+            }
+        ]
+    }
+    },
+    "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/nginx/access.log",
+            "log_group_name": "nginx-cft-test-ec2",
+            "log_stream_name": "{instance_id}",
+            "timestamp_format": "%b %d %H:%M:%S",
+            "timezone": "Local"
+          },
+          {
+            "file_path": "/var/log/nginx/error.log",
+            "log_group_name": "nginx-cft-test-ec2-errors",
+            "log_stream_name": "{instance_id}",
+            "timestamp_format": "%b %d %H:%M:%S",
+            "timezone": "Local"
+          }
+        ]
+      }
+    }
+  }
+}

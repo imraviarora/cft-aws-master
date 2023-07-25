@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Nginx RouteTraffic Server.
+
+Resources:
+  NginxInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-08795883c7b4b7140"
+      InstanceType: t4g.small 
+      KeyName: devops-access
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: "subnet-1c4da675"
+          GroupSet:
+            - "sg-2cd92a45"
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          apt-get update -y
+          timedatectl set-timezone Asia/Kolkata
+          echo "fs.file-max = 500000" >> /etc/sysctl.conf
+          echo "*	soft	nproc	65535" >> /etc/security/limits.conf
+          echo "*	hard	nproc	65535" >> /etc/security/limits.conf
+          echo "*	soft	nofile	500000" >> /etc/security/limits.conf
+          echo "*	hard	nofile	500000" >> /etc/security/limits.conf
+          apt-get install -y nginx
+          systemctl start nginx
+          systemctl enable nginx
+          wget https://s3.ap-south-1.amazonaws.com/amazoncloudwatch-agent-ap-south-1/ubuntu/arm64/latest/amazon-cloudwatch-agent.deb
+          dpkg -i -E ./amazon-cloudwatch-agent.deb
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s
+          wget https://hf-devops.s3.ap-south-1.amazonaws.com/ps/configs/nginx/amazon-cloudwatch-agent.json -P /opt/aws/amazon-cloudwatch-agent/etc/
+          chmod -R 777 /var/log/nginx
+          chown cwagent:cwagent /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json 
+          reboot
+      Tags:
+        - Key: Name
+          Value: "nginx-ec2-rv-test"
+  
+  # NginxSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: Allow HTTP access to Nginx server
+  #     VpcId: "vpc-0a5304a0XXXXXXXX"
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         FromPort: '22'
+  #         ToPort: '22'
+  #         CidrIp: 0.0.0.0/0
+  #       - IpProtocol: tcp
+  #         FromPort: '8080'
+  #         ToPort: '8080'
+  #         CidrIp: 0.0.0.0/0
+  #       - IpProtocol: tcp
+  #         FromPort: '80'
+  #         ToPort: '80'
+  #         CidrIp: 0.0.0.0/0
+  #     Tags:
+  #       - Key: Name
+  #         Value: nginx-security-group-public-test
+
+Outputs:
+  PublicIp:
+    Description: Public IP of the Nginx server
+    Value: !GetAtt NginxInstance.PublicIp

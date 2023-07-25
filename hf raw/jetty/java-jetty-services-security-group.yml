@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creating security group for all java services
+
+Resources:
+  JavaServicesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dev_java_services_sg
+      #Replace vpc id
+      VpcId: "vpc-0a5304a0XXXXXXXX" 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          # Replace security group id by jumpbox sg
+          SourceSecurityGroupId: sg-01bdfc65c1c3d4694
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          # Replace security group id by jenkins sg
+          SourceSecurityGroupId: sg-03077220766389279
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          # Replace security group id by allb sg
+          SourceSecurityGroupId: sg-08461553e977e4966
+      Tags:
+        - Key: Name
+          Value: dev_java_services_sg_test_cft

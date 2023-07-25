@@ -1,0 +1,178 @@
+# Env in /etc/environment file > install java jdk
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Installing jetty using helper scripts in Ubuntu 22.04 LTS
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+        Count: '1'
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: "S3"
+          roleName: "ec2-generic"
+      AWS::CloudFormation::Init:
+        configSets:
+          full_install:
+          - install_and_enable_postgres
+        install_and_enable_postgres:
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [main]
+                  - stack=
+                  - !Ref 'AWS::StackId'
+                  - |+
+
+                  - region=
+                  - !Ref 'AWS::Region'
+                  - |+
+
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [cfn-auto-reloader-hook]
+                  - |
+                    triggers=post.update
+                  - >
+                    path=Resources.WebServerInstance.Metadata.AWS::CloudFormation::Init
+                  - 'action=/opt/aws/bin/cfn-init -v '
+                  - '         --stack '
+                  - !Ref 'AWS::StackName'
+                  - '         --resource WebServerInstance '
+                  - '         --configsets InstallAndRun '
+                  - '         --region '
+                  - !Ref 'AWS::Region'
+                  - |+
+
+                  - |
+                    runas=root
+              mode: '000644'
+              owner: root
+              group: root
+            /lib/systemd/system/cfn-hup.service:
+              content:
+                Fn::Join:
+                - ''
+                - - "[Unit]\n"
+                  - "Description=cfn-hup daemon\n\n"
+                  - "[Service]\n"
+                  - 'Type=simple
+
+                    '
+                  - 'ExecStart=/usr/local/bin/cfn-hup
+
+                    '
+                  - "Restart=always\n\n"
+                  - "[Install]\n"
+                  - WantedBy=multi-user.target
+            /home/ubuntu/postgres_data_restore.sh:
+              mode: '000775'
+              owner: ubuntu
+              group: ubuntu
+              source: "https://hf-devops.s3.ap-south-1.amazonaws.com/ps/configs/postgres/postgres_data_restore.sh"
+              authentication: "S3AccessCreds"
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          commands:
+            enable_cfn_hup:
+              command: systemctl enable cfn-hup.service
+            start_cfn_hup:
+              command: systemctl start cfn-hup.service
+            SetIstTimeZone:
+              command: timedatectl set-timezone Asia/Kolkata
+            SetServerHardeningProperties:
+              command: "echo 'fs.file-max = 500000' >> /etc/sysctl.conf; echo '*	soft	nproc	65535' >> /etc/security/limits.conf; echo '*	hard	nproc	65535' >> /etc/security/limits.conf; echo '*	soft	nofile	500000' >> /etc/security/limits.conf; echo '*	hard	nofile	500000' >> /etc/security/limits.conf"
+            SetHostname:
+              command: hostnamectl set-hostname cft-postgres-test
+            InstallPostgres:
+              command: 'sudo apt -y install postgresql-12 postgresql-client-12'
+            StartPostgresService:
+              command: "sudo systemctl restart postgresql.service; sudo systemctl enable postgresql.service"
+            SetCustomAlias: #can throw error
+              command: echo "alias switchPostgres='sudo -i -u postgres'" >> /home/ubuntu/.bashrc
+            RemovingExtras:
+              command: "sudo apt autoremove -y"
+    Properties:
+      ImageId: "ami-08795883c7b4b7140"
+      InstanceType: t4g.xlarge
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: "40"
+            DeleteOnTermination: true
+            VolumeType: "gp3"
+      KeyName: devops-access
+      IamInstanceProfile: 
+        Ref: MyInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: "subnet-1c4da675"
+          GroupSet:
+            - "sg-2cd92a45"
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - "#!/bin/bash -xe\n"
+            - 'curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc|sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+
+              '
+            - 'echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" |sudo tee  /etc/apt/sources.list.d/pgdg.list
+
+              '
+            - 'sudo apt update -y; sudo apt upgrade -y
+
+              '
+            - 'sudo apt-get -y install python3-pip
+
+              '
+            - 'mkdir -p /opt/aws/
+
+              '
+            - 'sudo pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+
+              '
+            - 'sudo ln -s /usr/local/init/ubuntu/cfn-hup /etc/init.d/cfn-hup
+
+              '
+            - "/usr/local/bin/cfn-init -v "
+            - "         --stack "
+            - Ref: AWS::StackName
+            - "         --resource EC2Instance "
+            - "         --configsets full_install "
+            - "         --region "
+            - Ref: AWS::Region
+            - "\n"
+            - "/usr/local/bin/cfn-signal -e $? "
+            - "         --stack "
+            - Ref: AWS::StackName
+            - "         --resource EC2Instance "
+            - "         --region "
+            - Ref: AWS::Region
+            - "\n"
+      Tags:
+        - Key: Name
+          Value: "cft-postgres-testing"
+
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - "ec2-generic"

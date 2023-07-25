@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Install and configure jenkins on ubuntu server
+
+Parameters:
+  EnvName:
+    Description: Select the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  ServiceName:
+    Default: jenkins
+    Description: Write Service Name
+    Type: String
+    MinLength: '1'
+    MaxLength: '10'
+  VPCID:
+    Default: vpc-0a5304a0XXXXXXXX
+    Description: VPC id for creating security group
+    Type: String
+  SubnetID:
+    Default: subnet-03f1f0ddXXXXXXXX
+    Description: Private subnet id for vm
+    Type: String
+  KeyName:
+    Description: Key name to SSH VM
+    Type: AWS::EC2::KeyPair::KeyName
+  DiskSize:
+    Default: 30
+    Description: Enter disk size in GB
+    Type: String
+  JumpBoxSGID:
+    Default: sg-01bdfc65c1c3d4694
+    Description: Jump server security group id to open port 22 for it
+    Type: String
+  ALBSGID:
+    Default: sg-08461553e977e4966
+    Description: ALB security group id to open port 8080 for it
+    Type: String
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"          
+        Parameters:
+          - EnvName
+          - VPCID
+          - SubnetID
+      - Label:
+          default: "VM Configuration"    
+        Parameters:
+          - KeyName
+          - ServiceName
+          - DiskSize
+          - JumpBoxSGID
+          - ALBSGID
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+        Count: '1'
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: "S3"
+          roleName: "ec2-generic"
+      AWS::CloudFormation::Init:
+        configSets:
+          InstallAndRun:
+            - Install
+            - Configure
+        Install:
+          packages:
+            apt:
+             openjdk-17-jdk: []
+             openjdk-8-jdk-headless: []
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [main]
+                  - stack=
+                  - !Ref 'AWS::StackId'
+                  - |+
+
+                  - region=
+                  - !Ref 'AWS::Region'
+                  - |+
+
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [cfn-auto-reloader-hook]
+                  - |
+                    triggers=post.update
+                  - >
+                    path=Resources.WebServerInstance.Metadata.AWS::CloudFormation::Init
+                  - 'action=/opt/aws/bin/cfn-init -v '
+                  - '         --stack '
+                  - !Ref 'AWS::StackName'
+                  - '         --resource WebServerInstance '
+                  - '         --configsets InstallAndRun '
+                  - '         --region '
+                  - !Ref 'AWS::Region'
+                  - |+
+
+                  - |
+                    runas=root
+              mode: '000644'
+              owner: root
+              group: root
+            /lib/systemd/system/cfn-hup.service:
+              content:
+                Fn::Join:
+                - ''
+                - - "[Unit]\n"
+                  - "Description=cfn-hup daemon\n\n"
+                  - "[Service]\n"
+                  - 'Type=simple
+
+                    '
+                  - 'ExecStart=/usr/local/bin/cfn-hup
+
+                    '
+                  - "Restart=always\n\n"
+                  - "[Install]\n"
+                  - WantedBy=multi-user.target
+            /tmp/amazon-cloudwatch-agent.json:
+              mode: '000644'
+              owner: root
+              group: root
+              source: "https://hf-devops.s3.ap-south-1.amazonaws.com/ps/configs/jenkins/amazon-cloudwatch-agent.json"
+              authentication: "S3AccessCreds"
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          commands:
+            01enable_cfn_hup:
+              command: systemctl enable cfn-hup.service
+            02start_cfn_hup:
+              command: systemctl start cfn-hup.service
+        Configure:
+          commands:
+            03SetIstTimeZone:
+              command: timedatectl set-timezone Asia/Kolkata
+            04SetServerHardeningProperties:
+              command: !Join 
+                - ''
+                - - echo 'fs.file-max = 500000' >> /etc/sysctl.conf; 
+                  - ''
+                  - echo '*	soft	nproc	65535' >> /etc/security/limits.conf;
+                  - ''
+                  - echo '*	hard	nproc	65535' >> /etc/security/limits.conf;
+                  - ''
+                  - echo '*	soft	nofile	500000' >> /etc/security/limits.conf;
+                  - ''
+                  - echo '*	hard	nofile	500000' >> /etc/security/limits.conf
+            05SetHostname:
+              command: !Join 
+                - ''
+                - - hostnamectl set-hostname 
+                  - ' '
+                  - !Ref EnvName
+                  - '-'
+                  - !Ref ServiceName
+            06InstallJenkins:
+              command: "apt-get -y install jenkins"
+            # https://updates.jenkins.io/download/war/
+            07StartJenkinsService:
+              command: "systemctl start jenkins; systemctl enable jenkins"
+            08ConfigureCWAgent:
+              command: "wget https://s3.ap-south-1.amazonaws.com/amazoncloudwatch-agent-ap-south-1/ubuntu/arm64/latest/amazon-cloudwatch-agent.deb; dpkg -i -E ./amazon-cloudwatch-agent.deb; mv /tmp/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc; chown cwagent:cwagent /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json; sudo systemctl restart amazon-cloudwatch-agent"
+              cwd: "/tmp"
+            09RemovingExtras:
+              command: "rm /tmp/amazon-cloudwatch-agent.deb"
+    Properties:
+      ImageId: "ami-08795883c7b4b7140"
+      InstanceType: t4g.medium
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: !Ref DiskSize
+            DeleteOnTermination: true
+            VolumeType: "gp3"
+      KeyName: !Ref KeyName
+      IamInstanceProfile: 
+        Ref: MyInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "false"
+          DeviceIndex: "0"
+          SubnetId:
+            Ref: SubnetID
+          GroupSet:
+            - !Ref JenkinsSecurityGroup
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - "#!/bin/bash -xe\n"
+            - 'curl -fsSL https://pkg.jenkins.io/debian/jenkins.io-2023.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
+            
+              '
+            - 'echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+            
+              '
+            - 'sudo apt-get update -y
+
+              '
+            - 'sudo apt-get -y install python3-pip
+
+              '
+            - 'mkdir -p /opt/aws/
+
+              '
+            - 'sudo pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+
+              '
+            - 'sudo ln -s /usr/local/init/ubuntu/cfn-hup /etc/init.d/cfn-hup
+
+              '
+            - "/usr/local/bin/cfn-init -v "
+            - "         --stack "
+            - Ref: AWS::StackName
+            - "         --resource EC2Instance "
+            - "         --configsets InstallAndRun "
+            - "         --region "
+            - Ref: AWS::Region
+            - "\n"
+            - "/usr/local/bin/cfn-signal -e $? "
+            - "         --stack "
+            - Ref: AWS::StackName
+            - "         --resource EC2Instance "
+            - "         --region "
+            - Ref: AWS::Region
+            - "\n"
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Ref EnvName, !Ref ServiceName] ]
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value:
+            Ref: ServiceName
+        - Key: Component
+          Value: cicd
+        - Key: Env
+          Value:
+            Ref: EnvName
+  
+  JenkinsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Jenkins Security Group
+      VpcId:
+        Ref: VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          SourceSecurityGroupId: 
+            Ref: JumpBoxSGID 
+          Description: "jump box ssh"
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          SourceSecurityGroupId: 
+            Ref: ALBSGID 
+          Description: "alb access"
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Ref EnvName, !Ref ServiceName, 'sg'] ]
+        - Key: Stack
+          Value: java
+        - Key: Service
+          Value:
+            Ref: ServiceName
+        - Key: Component
+          Value: cicd
+        - Key: Env
+          Value:
+            Ref: EnvName
+
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - "ec2-generic"
+
+Outputs:
+  JenkinsPvtIP:
+    Description: Jenkins Server Private IP
+    Value: !GetAtt EC2Instance.PrivateIp
+    

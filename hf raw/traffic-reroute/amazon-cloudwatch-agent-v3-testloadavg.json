@@ -1,0 +1,32 @@
+{
+  "metrics": {
+  "append_dimensions": {
+    "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+    "InstanceId": "${aws:InstanceId}",
+    "InstanceType": "${aws:InstanceType}"
+  },
+  "metrics_collected": {
+    "cpu": {
+      "measurement": [
+        "cpu_usage_idle",
+        "cpu_usage_iowait",
+        "cpu_usage_irq",
+        "cpu_usage_nice",
+        "cpu_usage_softirq",
+        "cpu_usage_system",
+        "cpu_usage_user"
+      ],
+      "metrics_collection_interval": 60,
+      "totalcpu": true
+    },
+    "load": {
+      "measurement": [
+        "load_average_1m",
+        "load_average_5m",
+        "load_average_15m"
+      ],
+      "metrics_collection_interval": 60
+    }
+  }
+  }
+}

@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Creating ec2-generic iam role"
+
+Resources:
+  IamRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "ec2-generic-test"
+      Description: "Allows EC2 instances to call AWS services on your behalf"
+      Path: "/"
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "ec2.amazonaws.com"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        - "arn:aws:iam::aws:policy/EC2InstanceConnect"
+        - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+        - "arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy"
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+      Policies:
+        - PolicyName: "hf-devops-s3-bucket-iam-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: "Allow"
+                Action: "s3:GetObject"
+                Resource: "arn:aws:s3:::hf-devops/*"
+        - PolicyName: "cloudwatch_server_metrics_II"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: "Allow"
+                Action: "ec2:DescribeTags"
+                Resource: "*"
+        - PolicyName: "cloudwatch_server_metrics"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: "Allow"
+                Action:
+                  - "cloudwatch:PutMetricData"
+                  - "cloudwatch:GetMetricData"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:ListMetrics"
+                Resource: "*"
+        - PolicyName: "cloudwatch_app_logging"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: "Allow"
+                Action:
+                  - "logs:PutMetricFilter"
+                  - "logs:CreateLogStream"
+                  - "logs:DescribeLogStreams"
+                  - "logs:PutRetentionPolicy"
+                  - "logs:CreateLogGroup"
+                Resource: "arn:aws:logs:ap-south-1:*:log-group:*"
+              - Sid: "VisualEditor1"
+                Effect: "Allow"
+                Action: "logs:PutLogEvents"
+                Resource: "arn:aws:logs:ap-south-1:*:log-group:*:log-stream:*"
+  IamInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      InstanceProfileName: "ec2-generic-test"
+      Path: "/"
+      Roles:
+        - Ref: "IamRole"

@@ -1,0 +1,80 @@
+{
+    "agent": {
+            "metrics_collection_interval": 60,
+            "region": "ap-south-1",
+            "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log",
+            "debug": false,
+            "run_as_user": "cwagent"
+    },
+    "metrics": {
+    "namespace": "JettyCustomMetricsNamespace",
+    "metrics_collected": {
+      "procstat": [
+        {
+          "pattern": "java.*",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ],
+          "metrics_collection_interval": 10
+        }
+      ],
+      "mem": {
+        "measurement": [
+          "mem_used_percent"
+        ]
+      },
+      "disk": {
+        "measurement": [
+          "used_percent",
+          "total",
+          "used"
+        ],
+        "resources": [
+          "/"
+        ],
+        "ignore_file_system_types": [
+          "sysfs", 
+          "devtmpfs"
+        ],
+        "metrics_collection_interval": 60
+      },
+      "netstat": {
+        "measurement": [
+          "tcp_established"
+        ],
+        "metrics_collection_interval": 60
+      }
+    },
+    "append_dimensions": {
+      "ImageId": "${aws:ImageId}",
+      "InstanceId": "${aws:InstanceId}",
+      "InstanceType": "${aws:InstanceType}",
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}"
+    }
+    },
+    "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/home/ubuntu/jetty/base/logs/*.request.log", 
+            "log_group_name": "jetty-cft-test-ec2-requests-logs",
+            "log_stream_name": "{instance_id}",
+            "retention_in_days": 14,
+            "timestamp_format": "%b %d %H:%M:%S",
+            "timezone": "Local"
+          },
+          {
+            "file_path": "/home/ubuntu/jetty/base/logs/jetty.log",
+            "log_group_name": "jetty-cft-test-ec2-jetty-logs",
+            "log_stream_name": "{instance_id}",
+            "retention_in_days": 14,
+            "timestamp_format": "%b %d %H:%M:%S",
+            "timezone": "Local"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+    "agent": {
+            "metrics_collection_interval": 60,
+            "region": "ap-south-1",
+            "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log",
+            "debug": false,
+            "run_as_user": "cwagent"
+    },
+    "metrics": {
+    "namespace": "JenkinsCustomMetricsNamespace",
+    "metrics_collected": {
+      "procstat": [
+        {
+          "pattern": "java.*",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ],
+          "metrics_collection_interval": 10
+        }
+      ],
+      "mem": {
+        "measurement": [
+          "mem_used_percent"
+        ]
+      },
+      "disk": {
+        "measurement": [
+          "used_percent"
+        ],
+        "resources": [
+          "/"
+        ],
+        "ignore_file_system_types": [
+          "sysfs", 
+          "devtmpfs"
+        ],
+        "metrics_collection_interval": 60
+      },
+      "netstat": {
+        "measurement": [
+          "tcp_established"
+        ],
+        "metrics_collection_interval": 60
+      }
+    },
+    "append_dimensions": {
+      "ImageId": "${aws:ImageId}",
+      "InstanceId": "${aws:InstanceId}",
+      "InstanceType": "${aws:InstanceType}",
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}"
+    }
+    }
+}

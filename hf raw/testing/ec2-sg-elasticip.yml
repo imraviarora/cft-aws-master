@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Basic EC2 Instance.
+
+Parameters:
+  MyKeyName:
+    Description: Select the key name from the list
+    Type: AWS::EC2::KeyPair::KeyName
+  EnvironmentName:
+    Description: Select the environment
+    Type: String
+    Default: dev
+    AllowedValues: 
+      - dev
+      - test
+      - prod
+  MyAvailabilityZone:
+    Description: Select the AZ
+    Type: String
+    Default: us-east-2a
+    AllowedValues:
+      - us-east-2a
+      - us-east-2b    
+      - us-east-2c
+  MyInstanceType:
+    Description: Select the ec2 instance type from list
+    Type: String      
+    Default: t2.micro
+    AllowedValues: 
+      - t2.micro
+      - t2.small
+       
+Mappings:
+  MyEnvironmentMap:
+    dev:
+      instanceType: t4g.small
+    test:
+      instanceType: t4g.small
+    prod:
+      instanceType: t4g.medium
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "EC2 Instance Configuration"    
+        Parameters:
+          - MyInstanceType
+          - MyKeyName
+          - MyAvailabilityZone  
+      - Label:
+          default: "Environment Configuration"          
+        Parameters:
+          - EnvironmentName  
+    ParameterLabels:
+      EnvironmentName:
+        default: "Which environment we are planning to create this instance?"
+      MyKeyName:
+        default: "Be aware that once keyname is selected we cannot change it unless instance replaced"
+
+Resources:
+  DevEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0cd3dfa4e37921605
+      InstanceType: !FindInMap
+        - MyEnvironmentMap
+        - !Ref EnvironmentName
+        - instanceType
+      KeyName: !Ref MyKeyName
+      SecurityGroups:
+        - !Ref SSHSecurityGroup
+      AvailabilityZone: !Ref MyAvailabilityZone   
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: my new SSH SG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+
+  MyElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref DevEC2Instance
+
+Outputs:
+  MyInstanceId:
+    Description: My instance id
+    Value: !Ref DevEC2Instance
+  MyDNSName:
+    Description: My Public DNS Name
+    Value: !GetAtt DevEC2Instance.PublicDnsName
+  MyInstanceAvailabilityZone:
+    Description: Instance Availability Zone
+    Value: !GetAtt DevEC2Instance.AvailabilityZone
